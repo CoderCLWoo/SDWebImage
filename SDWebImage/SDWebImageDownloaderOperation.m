@@ -33,7 +33,7 @@ typedef NSMutableDictionary<NSString *, id> SDCallbacksDictionary;
 
 // This is weak because it is injected by whoever manages this session. If this gets nil-ed out, we won't be able to run
 // the task associated with this operation
-@property (weak, nonatomic, nullable) NSURLSession *unownedSession;
+@property (weak, nonatomic, nullable) NSURLSession *unownedSession;//从外部注入的NSURLSession
 // This is set if we're using not using an injected NSURLSession. We're responsible of invalidating this one
 @property (strong, nonatomic, nullable) NSURLSession *ownedSession;
 
@@ -83,18 +83,19 @@ typedef NSMutableDictionary<NSString *, id> SDCallbacksDictionary;
 - (void)dealloc {
     SDDispatchQueueRelease(_barrierQueue);//释放队列
 }
-
+//下载过程中的block回调，将这些block保存在字典中
 - (nullable id)addHandlersForProgress:(nullable SDWebImageDownloaderProgressBlock)progressBlock
                             completed:(nullable SDWebImageDownloaderCompletedBlock)completedBlock {
     SDCallbacksDictionary *callbacks = [NSMutableDictionary new];
     if (progressBlock) callbacks[kProgressCallbackKey] = [progressBlock copy];
     if (completedBlock) callbacks[kCompletedCallbackKey] = [completedBlock copy];
+    // dispatch_barrier_async 在并发过程中同步
     dispatch_barrier_async(self.barrierQueue, ^{
         [self.callbackBlocks addObject:callbacks];
     });
     return callbacks;
 }
-
+//根据key取到对应的block回调数组
 - (nullable NSArray<id> *)callbacksForKey:(NSString *)key {
     __block NSMutableArray<id> *callbacks = nil;
     dispatch_sync(self.barrierQueue, ^{
@@ -104,11 +105,13 @@ typedef NSMutableDictionary<NSString *, id> SDCallbacksDictionary;
     });
     return [callbacks copy];    // strip mutability here
 }
-
+//取消下载
 - (BOOL)cancel:(nullable id)token {
     __block BOOL shouldCancel = NO;
+    //移除下载过程的block回调
     dispatch_barrier_sync(self.barrierQueue, ^{
         [self.callbackBlocks removeObjectIdenticalTo:token];
+        //所有block回调都被移除掉了，说明可以取消该下载了
         if (self.callbackBlocks.count == 0) {
             shouldCancel = YES;
         }
