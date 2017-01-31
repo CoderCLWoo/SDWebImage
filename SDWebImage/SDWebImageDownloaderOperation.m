@@ -50,7 +50,7 @@ typedef NSMutableDictionary<NSString *, id> SDCallbacksDictionary;
 @implementation SDWebImageDownloaderOperation {
     size_t width, height;
 #if SD_UIKIT || SD_WATCH
-    UIImageOrientation orientation;
+    UIImageOrientation orientation;//图片方向
 #endif
     BOOL responseFromCached;
 }
@@ -136,21 +136,27 @@ typedef NSMutableDictionary<NSString *, id> SDCallbacksDictionary;
         if (hasApplication && [self shouldContinueWhenAppEntersBackground]) {
             __weak __typeof__ (self) wself = self;
             UIApplication * app = [UIApplicationClass performSelector:@selector(sharedApplication)];
+            //Marks the beginning of a new long-running background task.
+            //app进入后台，会停止所有线程,需要在applicationDidEnterBackground中调用
+            //beginBackgroundTaskWithExpirationHandler申请更多的app执行时间，以便结束某些任务
             self.backgroundTaskId = [app beginBackgroundTaskWithExpirationHandler:^{
                 __strong __typeof (wself) sself = wself;
 
                 if (sself) {
                     [sself cancel];
-
+            //Marks the end of a specific long-running background task.
                     [app endBackgroundTask:sself.backgroundTaskId];
                     sself.backgroundTaskId = UIBackgroundTaskInvalid;
                 }
             }];
         }
 #endif
+        //若是调用者没有传入session则内部创建session
         NSURLSession *session = self.unownedSession;
         if (!self.unownedSession) {
+            //使用默认的sessionConfig
             NSURLSessionConfiguration *sessionConfig = [NSURLSessionConfiguration defaultSessionConfiguration];
+            //超时时间
             sessionConfig.timeoutIntervalForRequest = 15;
             
             /**
@@ -163,25 +169,29 @@ typedef NSMutableDictionary<NSString *, id> SDCallbacksDictionary;
                                                          delegateQueue:nil];
             session = self.ownedSession;
         }
-        
+        //Creates a data task with the given request.  The request may have a body stream.
         self.dataTask = [session dataTaskWithRequest:self.request];
         self.executing = YES;
     }
-    
+    //dataTask开始执行
     [self.dataTask resume];
 
     if (self.dataTask) {
+        //进度回调Block
         for (SDWebImageDownloaderProgressBlock progressBlock in [self callbacksForKey:kProgressCallbackKey]) {
             progressBlock(0, NSURLResponseUnknownLength, self.request.URL);
         }
+        //发送开始下载的通知
         dispatch_async(dispatch_get_main_queue(), ^{
             [[NSNotificationCenter defaultCenter] postNotificationName:SDWebImageDownloadStartNotification object:self];
         });
     } else {
+        //创建dataTask出错处理
         [self callCompletionBlocksWithError:[NSError errorWithDomain:NSURLErrorDomain code:0 userInfo:@{NSLocalizedDescriptionKey : @"Connection can't be initialized"}]];
     }
 
 #if SD_UIKIT
+    //通知系统后台任务结束
     Class UIApplicationClass = NSClassFromString(@"UIApplication");
     if(!UIApplicationClass || ![UIApplicationClass respondsToSelector:@selector(sharedApplication)]) {
         return;
@@ -193,7 +203,7 @@ typedef NSMutableDictionary<NSString *, id> SDCallbacksDictionary;
     }
 #endif
 }
-
+//取消
 - (void)cancel {
     @synchronized (self) {
         [self cancelInternal];
@@ -201,17 +211,19 @@ typedef NSMutableDictionary<NSString *, id> SDCallbacksDictionary;
 }
 
 - (void)cancelInternal {
-    if (self.isFinished) return;
+    if (self.isFinished) return;//已经是取消状态，直接返回
     [super cancel];
 
     if (self.dataTask) {
-        [self.dataTask cancel];
+        [self.dataTask cancel];//取消数据请求
+        //发通知告知数据请求停止
         dispatch_async(dispatch_get_main_queue(), ^{
             [[NSNotificationCenter defaultCenter] postNotificationName:SDWebImageDownloadStopNotification object:self];
         });
 
         // As we cancelled the connection, its callback won't be called and thus won't
         // maintain the isFinished and isExecuting flags.
+        // 重置标志位的状态，表示执行停止，数据请求结束
         if (self.isExecuting) self.executing = NO;
         if (!self.isFinished) self.finished = YES;
     }
@@ -226,81 +238,101 @@ typedef NSMutableDictionary<NSString *, id> SDCallbacksDictionary;
 }
 
 - (void)reset {
+    //移除所有回调
     dispatch_barrier_async(self.barrierQueue, ^{
         [self.callbackBlocks removeAllObjects];
     });
     self.dataTask = nil;
     self.imageData = nil;
+    // 清理Session
     if (self.ownedSession) {
         [self.ownedSession invalidateAndCancel];
         self.ownedSession = nil;
     }
 }
 
+//设置isFinished属性的状态
 - (void)setFinished:(BOOL)finished {
     [self willChangeValueForKey:@"isFinished"];
     _finished = finished;
     [self didChangeValueForKey:@"isFinished"];
 }
 
+//设置isExecuting属性的状态
 - (void)setExecuting:(BOOL)executing {
     [self willChangeValueForKey:@"isExecuting"];
     _executing = executing;
     [self didChangeValueForKey:@"isExecuting"];
 }
-
+//并发
 - (BOOL)isConcurrent {
     return YES;
 }
 
 #pragma mark NSURLSessionDataDelegate
 
+//收到响应
 - (void)URLSession:(NSURLSession *)session
           dataTask:(NSURLSessionDataTask *)dataTask
 didReceiveResponse:(NSURLResponse *)response
  completionHandler:(void (^)(NSURLSessionResponseDisposition disposition))completionHandler {
     
     //'304 Not Modified' is an exceptional one
+    // （没有statusCode） 或者 （statusCode小于400 并且 statusCode 不等于304)
+    // 若是请求响应成功，statusCode是200，那么会进入这个代码分支
     if (![response respondsToSelector:@selector(statusCode)] || (((NSHTTPURLResponse *)response).statusCode < 400 && ((NSHTTPURLResponse *)response).statusCode != 304)) {
+        
+        NSUInteger code = ((NSHTTPURLResponse *)response).statusCode;
+        //期望收到的数据量
         NSInteger expected = response.expectedContentLength > 0 ? (NSInteger)response.expectedContentLength : 0;
         self.expectedSize = expected;
+        //下载过程回调，收到数据量为0
         for (SDWebImageDownloaderProgressBlock progressBlock in [self callbacksForKey:kProgressCallbackKey]) {
             progressBlock(0, expected, self.request.URL);
         }
-        
+        //根据期望收到的数据量创建NSMutableData，该NSMutableData用户保存收到的数据量
         self.imageData = [[NSMutableData alloc] initWithCapacity:expected];
+        //保存响应对象
         self.response = response;
+        //发送网络请求收到响应的通知
         dispatch_async(dispatch_get_main_queue(), ^{
             [[NSNotificationCenter defaultCenter] postNotificationName:SDWebImageDownloadReceiveResponseNotification object:self];
         });
     }
     else {
         NSUInteger code = ((NSHTTPURLResponse *)response).statusCode;
-        
         //This is the case when server returns '304 Not Modified'. It means that remote image is not changed.
         //In case of 304 we need just cancel the operation and return cached image from the cache.
         if (code == 304) {
+            //code 304 取消下载 直接返回缓存中的内容
             [self cancelInternal];
         } else {
+            //数据请求任务取消
             [self.dataTask cancel];
         }
+        
+        //发送停止下载的通知
         dispatch_async(dispatch_get_main_queue(), ^{
             [[NSNotificationCenter defaultCenter] postNotificationName:SDWebImageDownloadStopNotification object:self];
         });
-        
+        // 错误处理回调
         [self callCompletionBlocksWithError:[NSError errorWithDomain:NSURLErrorDomain code:((NSHTTPURLResponse *)response).statusCode userInfo:nil]];
 
         [self done];
     }
-    
+    // 调用completionHandler回调
     if (completionHandler) {
         completionHandler(NSURLSessionResponseAllow);
     }
 }
 
+// 收到请求数据
 - (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)dataTask didReceiveData:(NSData *)data {
+    //组装请求数据
     [self.imageData appendData:data];
-
+    //图片渐进加载
+    //https://blog.cnbluebox.com/blog/2015/07/10/architecture-ios-2/
+    //https://cocoaintheshell.whine.fr/2011/05/progressive-images-download-imageio/
     if ((self.options & SDWebImageDownloaderProgressiveDownload) && self.expectedSize > 0) {
         // The following code is from http://www.cocoaintheshell.com/2011/05/progressive-images-download-imageio/
         // Thanks to the author @Nyx0uf
@@ -310,15 +342,19 @@ didReceiveResponse:(NSURLResponse *)response
 
         // Update the data source, we must pass ALL the data, not just the new bytes
         CGImageSourceRef imageSource = CGImageSourceCreateWithData((__bridge CFDataRef)self.imageData, NULL);
-
+        // 取图片信息
         if (width + height == 0) {
             CFDictionaryRef properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, NULL);
             if (properties) {
                 NSInteger orientationValue = -1;
+                //取宽和高
                 CFTypeRef val = CFDictionaryGetValue(properties, kCGImagePropertyPixelHeight);
+                //取高
                 if (val) CFNumberGetValue(val, kCFNumberLongType, &height);
                 val = CFDictionaryGetValue(properties, kCGImagePropertyPixelWidth);
+                //取宽
                 if (val) CFNumberGetValue(val, kCFNumberLongType, &width);
+                //取方向
                 val = CFDictionaryGetValue(properties, kCGImagePropertyOrientation);
                 if (val) CFNumberGetValue(val, kCFNumberNSIntegerType, &orientationValue);
                 CFRelease(properties);
@@ -328,11 +364,12 @@ didReceiveResponse:(NSURLResponse *)response
                 // oriented incorrectly sometimes. (Unlike the image born of initWithData
                 // in didCompleteWithError.) So save it here and pass it on later.
 #if SD_UIKIT || SD_WATCH
+                //保存图片方向
                 orientation = [[self class] orientationFromPropertyValue:(orientationValue == -1 ? 1 : orientationValue)];
 #endif
             }
         }
-
+// 有对应的图片信息但是图片还没有下载完全
         if (width + height > 0 && totalSize < self.expectedSize) {
             // Create the image
             CGImageRef partialImageRef = CGImageSourceCreateImageAtIndex(imageSource, 0, NULL);
