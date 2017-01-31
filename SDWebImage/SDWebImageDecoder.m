@@ -16,6 +16,7 @@ static const size_t kBytesPerPixel = 4;
 static const size_t kBitsPerComponent = 8;
 
 + (nullable UIImage *)decodedImageWithImage:(nullable UIImage *)image {
+    //图片是否可以解压，若是不适合解压则直接返回原图片
     if (![UIImage shouldDecodeImage:image]) {
         return image;
     }
@@ -25,15 +26,20 @@ static const size_t kBitsPerComponent = 8;
     @autoreleasepool{
         
         CGImageRef imageRef = image.CGImage;
+        //CGColorSpaceRef : A profile that specifies how to interpret a color value for display.
         CGColorSpaceRef colorspaceRef = [UIImage colorSpaceForImageRef:imageRef];
-        
+        //宽度
         size_t width = CGImageGetWidth(imageRef);
+        //高度
         size_t height = CGImageGetHeight(imageRef);
+        //kBytesPerPixel 每个像素有4个字节
+        //图片每行的数据量
         size_t bytesPerRow = kBytesPerPixel * width;
 
         // kCGImageAlphaNone is not supported in CGBitmapContextCreate.
         // Since the original image here has no alpha info, use kCGImageAlphaNoneSkipLast
         // to create bitmap graphics contexts without alpha info.
+        // kBitsPerComponent（一个颜色由几个bit表示） :  the number of bits allocated for a single color component of a bitmap image.
         CGContextRef context = CGBitmapContextCreate(NULL,
                                                      width,
                                                      height,
@@ -48,13 +54,14 @@ static const size_t kBitsPerComponent = 8;
         // Draw the image into the context and retrieve the new bitmap image without alpha
         CGContextDrawImage(context, CGRectMake(0, 0, width, height), imageRef);
         CGImageRef imageRefWithoutAlpha = CGBitmapContextCreateImage(context);
+        // 在这个图片处理过程中丢失了图片的透明度信息
         UIImage *imageWithoutAlpha = [UIImage imageWithCGImage:imageRefWithoutAlpha
                                                          scale:image.scale
                                                    orientation:image.imageOrientation];
         
         CGContextRelease(context);
         CGImageRelease(imageRefWithoutAlpha);
-        
+        // 没有透明度信息的图片
         return imageWithoutAlpha;
     }
 }
@@ -214,18 +221,20 @@ static const CGFloat kDestSeemOverlap = 2.0f;   // the numbers of pixels to over
     }
 
     // do not decode animated images
+    // 动图无法解压
     if (image.images != nil) {
         return NO;
     }
     
     CGImageRef imageRef = image.CGImage;
-    
+    //获取透明信息
     CGImageAlphaInfo alpha = CGImageGetAlphaInfo(imageRef);
     BOOL anyAlpha = (alpha == kCGImageAlphaFirst ||
                      alpha == kCGImageAlphaLast ||
                      alpha == kCGImageAlphaPremultipliedFirst ||
                      alpha == kCGImageAlphaPremultipliedLast);
     // do not decode images with alpha
+    // 包含透明信息的图片则不适合解压
     if (anyAlpha) {
         return NO;
     }
@@ -253,9 +262,11 @@ static const CGFloat kDestSeemOverlap = 2.0f;   // the numbers of pixels to over
 
 + (CGColorSpaceRef)colorSpaceForImageRef:(CGImageRef)imageRef {
     // current
+    // 色彩模型
     CGColorSpaceModel imageColorSpaceModel = CGColorSpaceGetModel(CGImageGetColorSpace(imageRef));
+    // 获取色彩空间
     CGColorSpaceRef colorspaceRef = CGImageGetColorSpace(imageRef);
-    
+    // 不支持的色彩空间采用设备的RGB色彩空间
     BOOL unsupportedColorSpace = (imageColorSpaceModel == kCGColorSpaceModelUnknown ||
                                   imageColorSpaceModel == kCGColorSpaceModelMonochrome ||
                                   imageColorSpaceModel == kCGColorSpaceModelCMYK ||

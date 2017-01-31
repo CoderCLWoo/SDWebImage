@@ -282,7 +282,6 @@ didReceiveResponse:(NSURLResponse *)response
     // 若是请求响应成功，statusCode是200，那么会进入这个代码分支
     if (![response respondsToSelector:@selector(statusCode)] || (((NSHTTPURLResponse *)response).statusCode < 400 && ((NSHTTPURLResponse *)response).statusCode != 304)) {
         
-        NSUInteger code = ((NSHTTPURLResponse *)response).statusCode;
         //期望收到的数据量
         NSInteger expected = response.expectedContentLength > 0 ? (NSInteger)response.expectedContentLength : 0;
         self.expectedSize = expected;
@@ -372,16 +371,22 @@ didReceiveResponse:(NSURLResponse *)response
 // 有对应的图片信息但是图片还没有下载完全
         if (width + height > 0 && totalSize < self.expectedSize) {
             // Create the image
+            // 完整图片的一部分
             CGImageRef partialImageRef = CGImageSourceCreateImageAtIndex(imageSource, 0, NULL);
 
 #if SD_UIKIT || SD_WATCH
             // Workaround for iOS anamorphic image
             if (partialImageRef) {
+                // 获取图片的高
                 const size_t partialHeight = CGImageGetHeight(partialImageRef);
+                // 颜色空间
                 CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+                // Creates a bitmap graphics context.
                 CGContextRef bmContext = CGBitmapContextCreate(NULL, width, height, 8, width * 4, colorSpace, kCGBitmapByteOrderDefault | kCGImageAlphaPremultipliedFirst);
                 CGColorSpaceRelease(colorSpace);
                 if (bmContext) {
+                    //显示部分图片
+                    //渐进式显示的
                     CGContextDrawImage(bmContext, (CGRect){.origin.x = 0.0f, .origin.y = 0.0f, .size.width = width, .size.height = partialHeight}, partialImageRef);
                     CGImageRelease(partialImageRef);
                     partialImageRef = CGBitmapContextCreateImage(bmContext);
@@ -400,23 +405,27 @@ didReceiveResponse:(NSURLResponse *)response
 #elif SD_MAC
                 UIImage *image = [[UIImage alloc] initWithCGImage:partialImageRef size:NSZeroSize];
 #endif
+                //将不完整的图片保存到缓存
+                //获取图片的缓存key
                 NSString *key = [[SDWebImageManager sharedManager] cacheKeyForURL:self.request.URL];
+                //获取正确的缩放倍数图片
                 UIImage *scaledImage = [self scaledImageForKey:key image:image];
                 if (self.shouldDecompressImages) {
+                    //解压的图片
                     image = [UIImage decodedImageWithImage:scaledImage];
                 }
                 else {
                     image = scaledImage;
                 }
                 CGImageRelease(partialImageRef);
-                
+                // 图片处理过程回调
                 [self callCompletionBlocksWithImage:image imageData:nil error:nil finished:NO];
             }
         }
 
         CFRelease(imageSource);
     }
-
+    //下载过程回调
     for (SDWebImageDownloaderProgressBlock progressBlock in [self callbacksForKey:kProgressCallbackKey]) {
         progressBlock(self.imageData.length, self.expectedSize, self.request.URL);
     }
@@ -440,19 +449,22 @@ didReceiveResponse:(NSURLResponse *)response
 }
 
 #pragma mark NSURLSessionTaskDelegate
-
+//数据请求任务完成
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error {
     @synchronized(self) {
         self.dataTask = nil;
         dispatch_async(dispatch_get_main_queue(), ^{
+            // 发送停止下载通知
             [[NSNotificationCenter defaultCenter] postNotificationName:SDWebImageDownloadStopNotification object:self];
             if (!error) {
+                //发送完成下载通知
                 [[NSNotificationCenter defaultCenter] postNotificationName:SDWebImageDownloadFinishNotification object:self];
             }
         });
     }
     
     if (error) {
+        //错误回调
         [self callCompletionBlocksWithError:error];
     } else {
         if ([self callbacksForKey:kCompletedCallbackKey].count > 0) {
