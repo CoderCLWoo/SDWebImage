@@ -23,20 +23,28 @@
     }
     
     UIImage *image;
+    //识别图片格式
     SDImageFormat imageFormat = [NSData sd_imageFormatForImageData:data];
     if (imageFormat == SDImageFormatGIF) {
+    // gif图片处理，得到静态图片
         image = [UIImage sd_animatedGIFWithData:data];
     }
+//是否开启了 WEBP 格式支持
 #ifdef SD_WEBP
+    // webp图片处理
     else if (imageFormat == SDImageFormatWebP)
     {
+        // 得到webp格式图片
         image = [UIImage sd_imageWithWebPData:data];
     }
 #endif
+    // 静态图片处理
     else {
         image = [[UIImage alloc] initWithData:data];
 #if SD_UIKIT || SD_WATCH
+        //图片方向处理
         UIImageOrientation orientation = [self sd_imageOrientationFromImageData:data];
+        // 图片的方向默认是UIImageOrientationUp，若是本来图片的方向就是UIImageOrientationUp那么就不需要重新处理图片的方向
         if (orientation != UIImageOrientationUp) {
             image = [UIImage imageWithCGImage:image.CGImage
                                         scale:image.scale
@@ -50,6 +58,7 @@
 }
 
 #if SD_UIKIT || SD_WATCH
+//获取图片的方向
 +(UIImageOrientation)sd_imageOrientationFromImageData:(nonnull NSData *)imageData {
     UIImageOrientation result = UIImageOrientationUp;
     CGImageSourceRef imageSource = CGImageSourceCreateWithData((__bridge CFDataRef)imageData, NULL);
@@ -75,6 +84,7 @@
 #pragma mark EXIF orientation tag converter
 // Convert an EXIF image orientation to an iOS one.
 // reference see here: http://sylvana.net/jpegcrop/exif_orientation.html
+// 转化图片方向
 + (UIImageOrientation) sd_exifOrientationToiOSOrientation:(int)exifOrientation {
     UIImageOrientation orientation = UIImageOrientationUp;
     switch (exifOrientation) {

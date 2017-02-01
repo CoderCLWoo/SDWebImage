@@ -13,7 +13,8 @@
 #import "NSImage+WebCache.h"
 
 @implementation UIImage (GIF)
-
+// 返回静态图片
+// 在4.0版本之后 GIF 图片使用 FLAnimatedImageView 来支持，SDWEBImage对GIF的处理都是只取第一帧图片
 + (UIImage *)sd_animatedGIFWithData:(NSData *)data {
     if (!data) {
         return nil;
@@ -34,10 +35,11 @@
         CGFloat scale = 1;
         scale = [WKInterfaceDevice currentDevice].screenScale;
 #elif SD_UIKIT
+        // 缩放倍数
         CGFloat scale = 1;
         scale = [UIScreen mainScreen].scale;
 #endif
-        
+        //取第一帧图片
         CGImageRef CGImage = CGImageSourceCreateImageAtIndex(source, 0, NULL);
 #if SD_UIKIT || SD_WATCH
         UIImage *frameImage = [UIImage imageWithCGImage:CGImage scale:scale orientation:UIImageOrientationUp];
@@ -49,7 +51,7 @@
     }
 
     CFRelease(source);
-
+// 返回静态图片
     return staticImage;
 }
 

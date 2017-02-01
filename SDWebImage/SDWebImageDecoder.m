@@ -72,7 +72,7 @@ static const size_t kBitsPerComponent = 8;
  * Suggested value for iPad2 and iPhone 4: 120.
  * Suggested value for iPhone 3G and iPod 2 and earlier devices: 30.
  */
-static const CGFloat kDestImageSizeMB = 60.0f;
+static const CGFloat kDestImageSizeMB = 60.0f;//解码图像的最大容量
 
 /*
  * Defines the maximum size in MB of a tile used to decode image when the flag `SDWebImageScaleDownLargeImages` is set
@@ -82,19 +82,21 @@ static const CGFloat kDestImageSizeMB = 60.0f;
  */
 static const CGFloat kSourceImageTileSizeMB = 20.0f;
 
-static const CGFloat kBytesPerMB = 1024.0f * 1024.0f;
-static const CGFloat kPixelsPerMB = kBytesPerMB / kBytesPerPixel;
-static const CGFloat kDestTotalPixels = kDestImageSizeMB * kPixelsPerMB;
+static const CGFloat kBytesPerMB = 1024.0f * 1024.0f;//每MB有多少bytes
+static const CGFloat kPixelsPerMB = kBytesPerMB / kBytesPerPixel;//每MB有多少像素
+static const CGFloat kDestTotalPixels = kDestImageSizeMB * kPixelsPerMB;//图片的最大像素容量
 static const CGFloat kTileTotalPixels = kSourceImageTileSizeMB * kPixelsPerMB;
 
 static const CGFloat kDestSeemOverlap = 2.0f;   // the numbers of pixels to overlap the seems where tiles meet.
 
 + (nullable UIImage *)decodedAndScaledDownImageWithImage:(nullable UIImage *)image {
+    //是否需要解码图片
     if (![UIImage shouldDecodeImage:image]) {
         return image;
     }
-    
+    //是否需要缩小图片
     if (![UIImage shouldScaleDownImage:image]) {
+        //不需要缩小的图片则进行图片解码
         return [UIImage decodedImageWithImage:image];
     }
     
@@ -112,12 +114,14 @@ static const CGFloat kDestSeemOverlap = 2.0f;   // the numbers of pixels to over
         // Determine the scale ratio to apply to the input image
         // that results in an output image of the defined size.
         // see kDestImageSizeMB, and how it relates to destTotalPixels.
+        // 根据图片的缩小倍数 imageScale 计算缩小后的图片宽，高
         float imageScale = kDestTotalPixels / sourceTotalPixels;
         CGSize destResolution = CGSizeZero;
         destResolution.width = (int)(sourceResolution.width*imageScale);
         destResolution.height = (int)(sourceResolution.height*imageScale);
         
         // current color space
+        // 获取色彩空间
         CGColorSpaceRef colorspaceRef = [UIImage colorSpaceForImageRef:sourceImageRef];
         
         size_t bytesPerRow = kBytesPerPixel * destResolution.width;
@@ -131,6 +135,7 @@ static const CGFloat kDestSeemOverlap = 2.0f;   // the numbers of pixels to over
         // kCGImageAlphaNone is not supported in CGBitmapContextCreate.
         // Since the original image here has no alpha info, use kCGImageAlphaNoneSkipLast
         // to create bitmap graphics contexts without alpha info.
+        // 创建保存该图片信息的destContext
         destContext = CGBitmapContextCreate(destBitmapData,
                                             destResolution.width,
                                             destResolution.height,
@@ -143,6 +148,7 @@ static const CGFloat kDestSeemOverlap = 2.0f;   // the numbers of pixels to over
             free(destBitmapData);
             return image;
         }
+        // 设置图片质量
         CGContextSetInterpolationQuality(destContext, kCGInterpolationHigh);
         
         // Now define the size of the rectangle to be used for the
@@ -242,6 +248,7 @@ static const CGFloat kDestSeemOverlap = 2.0f;   // the numbers of pixels to over
     return YES;
 }
 
+//是否需要缩小图像，若是像素超出限定的 kDestTotalPixels，那么需要缩小图像
 + (BOOL)shouldScaleDownImage:(nonnull UIImage *)image {
     BOOL shouldScaleDown = YES;
         
@@ -250,10 +257,13 @@ static const CGFloat kDestSeemOverlap = 2.0f;   // the numbers of pixels to over
     sourceResolution.width = CGImageGetWidth(sourceImageRef);
     sourceResolution.height = CGImageGetHeight(sourceImageRef);
     float sourceTotalPixels = sourceResolution.width * sourceResolution.height;
+    //图像的最大像素容量 / 特定图像的像素
     float imageScale = kDestTotalPixels / sourceTotalPixels;
     if (imageScale < 1) {
+        //需要缩小
         shouldScaleDown = YES;
     } else {
+        //不需要缩小
         shouldScaleDown = NO;
     }
     

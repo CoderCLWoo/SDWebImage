@@ -281,7 +281,6 @@ didReceiveResponse:(NSURLResponse *)response
     // （没有statusCode） 或者 （statusCode小于400 并且 statusCode 不等于304)
     // 若是请求响应成功，statusCode是200，那么会进入这个代码分支
     if (![response respondsToSelector:@selector(statusCode)] || (((NSHTTPURLResponse *)response).statusCode < 400 && ((NSHTTPURLResponse *)response).statusCode != 304)) {
-        
         //期望收到的数据量
         NSInteger expected = response.expectedContentLength > 0 ? (NSInteger)response.expectedContentLength : 0;
         self.expectedSize = expected;
@@ -431,6 +430,7 @@ didReceiveResponse:(NSURLResponse *)response
     }
 }
 
+//缓存处理
 - (void)URLSession:(NSURLSession *)session
           dataTask:(NSURLSessionDataTask *)dataTask
  willCacheResponse:(NSCachedURLResponse *)proposedResponse
@@ -478,11 +478,15 @@ didReceiveResponse:(NSURLResponse *)response
                 // hack
                 [self callCompletionBlocksWithImage:nil imageData:nil error:nil finished:YES];
             } else if (self.imageData) {
+                //处理图片方向和图片格式
                 UIImage *image = [UIImage sd_imageWithData:self.imageData];
+                // 获取缓存key
                 NSString *key = [[SDWebImageManager sharedManager] cacheKeyForURL:self.request.URL];
+                // 处理图片的缩放倍数
                 image = [self scaledImageForKey:key image:image];
                 
                 // Do not force decoding animated GIFs
+                // 动图不要解压
                 if (!image.images) {
                     if (self.shouldDecompressImages) {
                         if (self.options & SDWebImageDownloaderScaleDownLargeImages) {
@@ -495,6 +499,7 @@ didReceiveResponse:(NSURLResponse *)response
                         }
                     }
                 }
+                // 回调处理
                 if (CGSizeEqualToSize(image.size, CGSizeZero)) {
                     [self callCompletionBlocksWithError:[NSError errorWithDomain:SDWebImageErrorDomain code:0 userInfo:@{NSLocalizedDescriptionKey : @"Downloaded image has 0 pixels"}]];
                 } else {
@@ -505,9 +510,11 @@ didReceiveResponse:(NSURLResponse *)response
             }
         }
     }
+    // 完成
     [self done];
 }
 
+// https认证
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didReceiveChallenge:(NSURLAuthenticationChallenge *)challenge completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition disposition, NSURLCredential *credential))completionHandler {
     
     NSURLSessionAuthChallengeDisposition disposition = NSURLSessionAuthChallengePerformDefaultHandling;

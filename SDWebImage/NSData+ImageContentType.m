@@ -12,12 +12,15 @@
 
 @implementation NSData (ImageContentType)
 
+//识别图片格式
 + (SDImageFormat)sd_imageFormatForImageData:(nullable NSData *)data {
     if (!data) {
         return SDImageFormatUndefined;
     }
     
     uint8_t c;
+    //读取图片文件头识别图片格式
+    //Copies a number of bytes from the start of the receiver's data into a given buffer.
     [data getBytes:&c length:1];
     switch (c) {
         case 0xFF:
