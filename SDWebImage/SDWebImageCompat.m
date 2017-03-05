@@ -29,7 +29,7 @@ inline UIImage *SDScaledImageForKey(NSString * _Nullable key, UIImage * _Nullabl
             //递归处理
             [scaledImages addObject:SDScaledImageForKey(key, tempImage)];
         }
-    // 处理动图播放
+       // 处理动图播放
         return [UIImage animatedImageWithImages:scaledImages duration:image.duration];
     }
     else {

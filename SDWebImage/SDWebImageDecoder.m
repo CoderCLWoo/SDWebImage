@@ -21,6 +21,7 @@ static const size_t kBitsPerComponent = 8;
         return image;
     }
     
+    
     // autorelease the bitmap context and all vars to help system to free memory when there are memory warning.
     // on iOS7, do not forget to call [[SDImageCache sharedImageCache] clearMemory];
     @autoreleasepool{
@@ -85,6 +86,7 @@ static const CGFloat kSourceImageTileSizeMB = 20.0f;
 static const CGFloat kBytesPerMB = 1024.0f * 1024.0f;//每MB有多少bytes
 static const CGFloat kPixelsPerMB = kBytesPerMB / kBytesPerPixel;//每MB有多少像素
 static const CGFloat kDestTotalPixels = kDestImageSizeMB * kPixelsPerMB;//图片的最大像素容量
+// The "tile" is the maximum amount of pixel data to load from the input image into memory at one time.
 static const CGFloat kTileTotalPixels = kSourceImageTileSizeMB * kPixelsPerMB;
 
 static const CGFloat kDestSeemOverlap = 2.0f;   // the numbers of pixels to overlap the seems where tiles meet.
@@ -101,7 +103,7 @@ static const CGFloat kDestSeemOverlap = 2.0f;   // the numbers of pixels to over
     }
     
     CGContextRef destContext;
-    
+    // 图片缩小的代码来自Apple的官方Demo，里面有比较详细的注释 https://developer.apple.com/library/content/samplecode/LargeImageDownsizing/Introduction/Intro.html
     // autorelease the bitmap context and all vars to help system to free memory when there are memory warning.
     // on iOS7, do not forget to call [[SDImageCache sharedImageCache] clearMemory];
     @autoreleasepool {
@@ -114,7 +116,6 @@ static const CGFloat kDestSeemOverlap = 2.0f;   // the numbers of pixels to over
         // Determine the scale ratio to apply to the input image
         // that results in an output image of the defined size.
         // see kDestImageSizeMB, and how it relates to destTotalPixels.
-        // 根据图片的缩小倍数 imageScale 计算缩小后的图片宽，高
         float imageScale = kDestTotalPixels / sourceTotalPixels;
         CGSize destResolution = CGSizeZero;
         destResolution.width = (int)(sourceResolution.width*imageScale);
@@ -161,17 +162,18 @@ static const CGFloat kDestSeemOverlap = 2.0f;   // the numbers of pixels to over
         // from a decoding opertion by achnoring our tile size to the full
         // width of the input image.
         CGRect sourceTile = CGRectZero;
-        sourceTile.size.width = sourceResolution.width;
+        sourceTile.size.width = sourceResolution.width;//图片宽度
         // The source tile height is dynamic. Since we specified the size
         // of the source tile in MB, see how many rows of pixels high it
         // can be given the input image width.
         sourceTile.size.height = (int)(kTileTotalPixels / sourceTile.size.width );
+        
         sourceTile.origin.x = 0.0f;
         // The output tile is the same proportions as the input tile, but
         // scaled to image scale.
         CGRect destTile;
         destTile.size.width = destResolution.width;
-        destTile.size.height = sourceTile.size.height * imageScale;
+        destTile.size.height = sourceTile.size.height * imageScale;// 图片高度缩小后的高度
         destTile.origin.x = 0.0f;
         // The source seem overlap is proportionate to the destination seem overlap.
         // this is the amount of pixels to overlap each tile as we assemble the ouput image.

@@ -328,13 +328,13 @@ didReceiveResponse:(NSURLResponse *)response
 - (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)dataTask didReceiveData:(NSData *)data {
     //组装请求数据
     [self.imageData appendData:data];
-    //图片渐进加载
-    //https://blog.cnbluebox.com/blog/2015/07/10/architecture-ios-2/
-    //https://cocoaintheshell.whine.fr/2011/05/progressive-images-download-imageio/
+
     if ((self.options & SDWebImageDownloaderProgressiveDownload) && self.expectedSize > 0) {
+        //图片渐进加载
+        //https://blog.cnbluebox.com/blog/2015/07/10/architecture-ios-2/
+        //https://cocoaintheshell.whine.fr/2011/05/progressive-images-download-imageio/
         // The following code is from http://www.cocoaintheshell.com/2011/05/progressive-images-download-imageio/
         // Thanks to the author @Nyx0uf
-
         // Get the total bytes downloaded
         const NSInteger totalSize = self.imageData.length;
 

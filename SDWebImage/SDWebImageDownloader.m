@@ -139,12 +139,13 @@
     }
 }
 
+//传入图片的URL，图片下载过程的Block回调，图片完成的Block回调
 - (nullable SDWebImageDownloadToken *)downloadImageWithURL:(nullable NSURL *)url
                                                    options:(SDWebImageDownloaderOptions)options
                                                   progress:(nullable SDWebImageDownloaderProgressBlock)progressBlock
                                                  completed:(nullable SDWebImageDownloaderCompletedBlock)completedBlock {
     __weak SDWebImageDownloader *wself = self;
-
+    // 传入对应的参数，addProgressCallback: completedBlock: forURL: createCallback: 方法
     return [self addProgressCallback:progressBlock completedBlock:completedBlock forURL:url createCallback:^SDWebImageDownloaderOperation *{
         __strong __typeof (wself) sself = wself;
         NSTimeInterval timeoutInterval = sself.downloadTimeout;
@@ -153,6 +154,7 @@
         }
 
         // In order to prevent from potential duplicate caching (NSURLCache + SDImageCache) we disable the cache for image requests if told otherwise
+        // Header的设置
         NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:url cachePolicy:(options & SDWebImageDownloaderUseNSURLCache ? NSURLRequestUseProtocolCachePolicy : NSURLRequestReloadIgnoringLocalCacheData) timeoutInterval:timeoutInterval];
         request.HTTPShouldHandleCookies = (options & SDWebImageDownloaderHandleCookies);
         request.HTTPShouldUsePipelining = YES;
@@ -162,21 +164,22 @@
         else {
             request.allHTTPHeaderFields = sself.HTTPHeaders;
         }
+        //创建 SDWebImageDownloaderOperation，这个是下载任务的执行者。并设置对应的参数
         SDWebImageDownloaderOperation *operation = [[sself.operationClass alloc] initWithRequest:request inSession:sself.session options:options];
         operation.shouldDecompressImages = sself.shouldDecompressImages;
-        
+        //用于请求认证
         if (sself.urlCredential) {
             operation.credential = sself.urlCredential;
         } else if (sself.username && sself.password) {
             operation.credential = [NSURLCredential credentialWithUser:sself.username password:sself.password persistence:NSURLCredentialPersistenceForSession];
         }
-        
+        //下载任务优先级
         if (options & SDWebImageDownloaderHighPriority) {
             operation.queuePriority = NSOperationQueuePriorityHigh;
         } else if (options & SDWebImageDownloaderLowPriority) {
             operation.queuePriority = NSOperationQueuePriorityLow;
         }
-
+        //加入任务的执行队列
         [sself.downloadQueue addOperation:operation];
         if (sself.executionOrder == SDWebImageDownloaderLIFOExecutionOrder) {
             // Emulate LIFO execution order by systematically adding new operations as last operation's dependency
@@ -190,6 +193,7 @@
 
 - (void)cancel:(nullable SDWebImageDownloadToken *)token {
     dispatch_barrier_async(self.barrierQueue, ^{
+        //根据token取出对应的SDWebImageDownloaderOperation对象然后调用该对象的cancel: 方法
         SDWebImageDownloaderOperation *operation = self.URLOperations[token.url];
         BOOL canceled = [operation cancel:token.downloadOperationCancelToken];
         if (canceled) {
@@ -246,7 +250,7 @@
 }
 
 #pragma mark Helper methods
-
+//根据NSURLSessionTask的taskIdentifier取出对应的SDWebImageDownloaderOperation对象
 - (SDWebImageDownloaderOperation *)operationWithTask:(NSURLSessionTask *)task {
     SDWebImageDownloaderOperation *returnOperation = nil;
     for (SDWebImageDownloaderOperation *operation in self.downloadQueue.operations) {
@@ -266,6 +270,7 @@ didReceiveResponse:(NSURLResponse *)response
  completionHandler:(void (^)(NSURLSessionResponseDisposition disposition))completionHandler {
 
     // Identify the operation that runs this task and pass it the delegate method
+    // 取得 SDWebImageDownloaderOperation 对象将URLSession的回调转发给它
     SDWebImageDownloaderOperation *dataOperation = [self operationWithTask:dataTask];
 
     [dataOperation URLSession:session dataTask:dataTask didReceiveResponse:response completionHandler:completionHandler];
@@ -275,7 +280,7 @@ didReceiveResponse:(NSURLResponse *)response
 
     // Identify the operation that runs this task and pass it the delegate method
     SDWebImageDownloaderOperation *dataOperation = [self operationWithTask:dataTask];
-
+    // 取得 SDWebImageDownloaderOperation 对象将URLSession的回调转发给它
     [dataOperation URLSession:session dataTask:dataTask didReceiveData:data];
 }
 
@@ -286,7 +291,7 @@ didReceiveResponse:(NSURLResponse *)response
 
     // Identify the operation that runs this task and pass it the delegate method
     SDWebImageDownloaderOperation *dataOperation = [self operationWithTask:dataTask];
-
+    // 取得 SDWebImageDownloaderOperation 对象将URLSession的回调转发给它
     [dataOperation URLSession:session dataTask:dataTask willCacheResponse:proposedResponse completionHandler:completionHandler];
 }
 
@@ -295,7 +300,7 @@ didReceiveResponse:(NSURLResponse *)response
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error {
     // Identify the operation that runs this task and pass it the delegate method
     SDWebImageDownloaderOperation *dataOperation = [self operationWithTask:task];
-
+    // 取得 SDWebImageDownloaderOperation 对象将URLSession的回调转发给它
     [dataOperation URLSession:session task:task didCompleteWithError:error];
 }
 
@@ -308,7 +313,7 @@ didReceiveResponse:(NSURLResponse *)response
 
     // Identify the operation that runs this task and pass it the delegate method
     SDWebImageDownloaderOperation *dataOperation = [self operationWithTask:task];
-
+    // 取得 SDWebImageDownloaderOperation 对象将URLSession的回调转发给它
     [dataOperation URLSession:session task:task didReceiveChallenge:challenge completionHandler:completionHandler];
 }
 
